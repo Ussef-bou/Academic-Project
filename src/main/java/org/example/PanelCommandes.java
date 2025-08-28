@@ -217,26 +217,47 @@ public class PanelCommandes extends JPanel {
     private void chargerTables(int salleId) {
         tablePanel.removeAll();
         try {
-            String sql = "SELECT nom_table FROM les_tables WHERE salle_id = ?";
+            String sql = "SELECT id, nom_table, etat FROM les_tables WHERE salle_id = ?";
             PreparedStatement ps = conn.prepareStatement(sql);
             ps.setInt(1, salleId);
             ResultSet rs = ps.executeQuery();
+
             while (rs.next()) {
+                int tableId = rs.getInt("id");
                 String nom = rs.getString("nom_table");
+                String etat = rs.getString("etat");
+
                 JButton btnTable = new JButton(nom);
                 btnTable.setPreferredSize(new Dimension(120, 60));
-                btnTable.addActionListener(e -> {
-                    tableSelectionnee = nom;
-                    salle_table.setText(" " + salleSelectionnee + " | " + tableSelectionnee);
-                });
+                if ("occupée".equals(etat)) {
+                    btnTable.setBackground(Color.RED);
+                    btnTable.setEnabled(false);
+                } else {
+                    btnTable.setBackground(Color.GREEN);
+                    btnTable.addActionListener(e -> {
+                        tableSelectionnee = nom;
+                        salle_table.setText(" " + salleSelectionnee + " | " + tableSelectionnee);
+                        try (PreparedStatement pst = conn.prepareStatement(
+                                "UPDATE les_tables SET etat='occupée' WHERE id=?")) {
+                            pst.setInt(1, tableId);
+                            pst.executeUpdate();
+                        } catch (SQLException ex) {
+                            ex.printStackTrace();
+                        }
+                        chargerTables(salleId);
+                    });
+                }
+
                 tablePanel.add(btnTable);
             }
+
             tablePanel.revalidate();
             tablePanel.repaint();
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
+
 
     private void setupPanier() {
         String[] colonnes = {"Article", "Prix", "Quantité", "Total"};
@@ -291,8 +312,23 @@ public class PanelCommandes extends JPanel {
 
     private void commandevalide() {
         String sql = "INSERT INTO commande (article_id , prix_unitaire,quantite ,prix_total ,operateur_id ,ticket_id) VALUES (?,?,?,?,?,?)  ";
-        String sqi = "INSERT INTO ticket (date_heure,operateur_id,total_ttc ) VALUES (?,?,?)";
+        String sqi = "INSERT INTO ticket (date_heure,operateur_id,total_ttc ,table_id ,salle_id) VALUES (?,?,?,?,?)";
         double ttc = 0;
+        int tableid=-1;
+        int salleid=-1;
+        try{
+            String sq="SELECT salle_id,id FROM les_tables WHERE nom_table=?";
+            try(PreparedStatement ps= conn.prepareStatement(sq)){
+                ps.setInt(1, Integer.parseInt(tableSelectionnee));
+                ResultSet rs = ps.executeQuery();
+                if(rs.next()){
+                    tableid=rs.getInt("id");
+                    salleid=rs.getInt("salle_id");
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         for (int i = 0; i < panier.getRowCount(); i++) {
             ttc += (Double) panier.getValueAt(i, 3);
         }
@@ -302,6 +338,8 @@ public class PanelCommandes extends JPanel {
             p.setTimestamp(1, now);
             p.setInt(2, operateur_id);
             p.setDouble(3, ttc);
+            p.setInt(4, tableid);
+            p.setInt(5, salleid);
             p.executeUpdate();
             ResultSet rs = p.getGeneratedKeys();
             int ticketId = -1;
