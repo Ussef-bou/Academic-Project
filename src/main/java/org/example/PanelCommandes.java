@@ -31,6 +31,7 @@ public class PanelCommandes extends JPanel {
 
 
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        topPanel.setPreferredSize(new Dimension(100, 50));
         JButton btnReset = new JButton("Reset");
 
         JButton btnSalle = new JButton("Salle");
@@ -47,10 +48,11 @@ public class PanelCommandes extends JPanel {
         salleScroller.setPreferredSize(new Dimension(100, 50));
 
         panierPanel = new JPanel(new BorderLayout());
-        panierPanel.setPreferredSize(new Dimension(300, 100));
+        panierPanel.setPreferredSize(new Dimension(300, 50));
         setupPanier();
 
         JPanel middlePanel = new JPanel(new BorderLayout());
+        middlePanel.setPreferredSize(new Dimension(120, 50));
         middlePanel.add(famillesScroll, BorderLayout.CENTER);
         middlePanel.add(panierPanel, BorderLayout.EAST);
 
@@ -59,6 +61,7 @@ public class PanelCommandes extends JPanel {
         switcherPanel.setPreferredSize(new Dimension(100, 200));
         articlesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         tablePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        tablePanel.setPreferredSize(new Dimension(100, 200));
 
         switcherPanel.add(new JScrollPane(articlesPanel), "Articles");
         switcherPanel.add(new JScrollPane(tablePanel), "Tables");
@@ -83,6 +86,7 @@ public class PanelCommandes extends JPanel {
         chargerFamilles();
         chargerSalles();
     }
+
 
     private void chargerFamilles() {
         famillesPanel.removeAll();
@@ -271,6 +275,8 @@ public class PanelCommandes extends JPanel {
         btnSupprimer.addActionListener(e -> supprimerArticle());
         JButton btnValider = new JButton("Valider");
         JPanel top = new JPanel(new BorderLayout());
+        JButton btnespece = new JButton("Espece");
+
         top.add(salle_table, BorderLayout.WEST);
         top.add(btnSupprimer, BorderLayout.EAST);
         top.add(btnValider, BorderLayout.CENTER);
@@ -281,6 +287,7 @@ public class PanelCommandes extends JPanel {
 
         JPanel bottom = new JPanel(new BorderLayout());
         bottom.add(total, BorderLayout.EAST);
+        bottom.add(btnespece, BorderLayout.WEST);
 
         panierPanel.add(top, BorderLayout.NORTH);
         panierPanel.add(scroll, BorderLayout.CENTER);
@@ -310,20 +317,31 @@ public class PanelCommandes extends JPanel {
         calculerTotal();
     }
 
+    private void liberertable(int tableId) {
+        String sql = "UPDATE les_tables SET etat='libre' WHERE id=?";
+        try(PreparedStatement ps=conn.prepareStatement(sql)){
+            ps.setInt(1,tableId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
     private void commandevalide() {
         String sql = "INSERT INTO commande (article_id , prix_unitaire,quantite ,prix_total ,operateur_id ,ticket_id) VALUES (?,?,?,?,?,?)  ";
-        String sqi = "INSERT INTO ticket (date_heure,operateur_id,total_ttc ,table_id ,salle_id) VALUES (?,?,?,?,?)";
+        String sqi = "INSERT INTO ticket (date_heure,operateur_id,total_ttc ,table_id ) VALUES (?,?,?,?)";
         double ttc = 0;
         int tableid=-1;
-        int salleid=-1;
+
         try{
-            String sq="SELECT salle_id,id FROM les_tables WHERE nom_table=?";
+            String sq="SELECT id FROM les_tables WHERE nom_table=?";
             try(PreparedStatement ps= conn.prepareStatement(sq)){
-                ps.setInt(1, Integer.parseInt(tableSelectionnee));
+                ps.setString(1, tableSelectionnee);
                 ResultSet rs = ps.executeQuery();
                 if(rs.next()){
                     tableid=rs.getInt("id");
-                    salleid=rs.getInt("salle_id");
+
                 }
             }
         } catch (SQLException e) {
@@ -339,7 +357,6 @@ public class PanelCommandes extends JPanel {
             p.setInt(2, operateur_id);
             p.setDouble(3, ttc);
             p.setInt(4, tableid);
-            p.setInt(5, salleid);
             p.executeUpdate();
             ResultSet rs = p.getGeneratedKeys();
             int ticketId = -1;
@@ -362,16 +379,26 @@ public class PanelCommandes extends JPanel {
                 ResultSet rs1 = ps1.executeQuery();
                 if (rs1.next()) {
                     int id = rs1.getInt("id");
-                    try (PreparedStatement ps2 = conn.prepareStatement(sql)) {
-                        ps2.setInt(1, id);
-                        ps2.setDouble(2, prix);
-                        ps2.setInt(3, quantite);
-                        ps2.setDouble(4, ttc);
-
-                        ps2.setInt(5, operateur_id);
-                        ps2.setInt(6, ticketId);
-                        ps2.executeUpdate();
+                    if (tableSelectionnee == null || tableSelectionnee.isEmpty()
+                            || salleSelectionnee == null || salleSelectionnee.isEmpty()) {
+                        JOptionPane.showMessageDialog(this, "La commande doit être liée à une table.");
+                        return;
                     }
+                    else{
+                        try (PreparedStatement ps2 = conn.prepareStatement(sql)) {
+                            ps2.setInt(1, id);
+                            ps2.setDouble(2, prix);
+                            ps2.setInt(3, quantite);
+                            double prixTotal = prix * quantite;
+                            ps2.setDouble(4, prixTotal);
+
+
+                            ps2.setInt(5, operateur_id);
+                            ps2.setInt(6, ticketId);
+                            ps2.executeUpdate();
+                        }
+                    }
+
                 }
 
 
@@ -387,12 +414,13 @@ public class PanelCommandes extends JPanel {
             }
 
             String ticket = construireTicket("Client", lignes, ttc);
-            imprimerTicket(ticket);
+            // imprimerTicket(ticket);
 
 
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        liberertable(tableid);
 
     }
 

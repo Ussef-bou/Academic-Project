@@ -75,7 +75,7 @@ public class Main extends JFrame {
 
             try {
                 String sql1="SELECT g.nom_groupe ,o.id FROM operateur o JOIN groupe g ON o.groupe_op=g.id WHERE o.nom_operateur=? AND o.password=?";
-                String sql = "SELECT * FROM operateur WHERE nom_operateur = ? AND password = ?";
+               
                 PreparedStatement ps = conn.prepareStatement(sql1);
                 ps.setString(1, username);
                 ps.setString(2, password);
