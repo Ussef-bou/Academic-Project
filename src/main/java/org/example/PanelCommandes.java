@@ -12,7 +12,8 @@ import java.time.format.DateTimeFormatter;
 
 public class PanelCommandes extends JPanel {
     private final Connection conn;
-    private JPanel famillesPanel, articlesPanel, panierPanel, sallePanel, tablePanel;
+    private JPanel famillesPanel, articlesPanel, panierPanel, sallePanel, tablePanel, panelCmdEnCours;
+    ;
     private JTable panierTable;
     private JLabel total;
     private JLabel salle_table;
@@ -21,6 +22,7 @@ public class PanelCommandes extends JPanel {
     private String salleSelectionnee = "";
     private String tableSelectionnee = "";
     private JPanel switcherPanel;
+    private int idtbs=-1;
 
     public PanelCommandes(Connection conn, int operateur_id) {
         this.conn = conn;
@@ -33,10 +35,14 @@ public class PanelCommandes extends JPanel {
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         topPanel.setPreferredSize(new Dimension(100, 50));
         JButton btnReset = new JButton("Reset");
-
+        JButton btnencours=new JButton("Cmd encours");
         JButton btnSalle = new JButton("Salle");
 
+
+        btnencours.addActionListener(e -> encours());
+
         topPanel.add(btnReset);
+        topPanel.add(btnencours);
 
         topPanel.add(btnSalle);
 
@@ -52,7 +58,7 @@ public class PanelCommandes extends JPanel {
         setupPanier();
 
         JPanel middlePanel = new JPanel(new BorderLayout());
-        middlePanel.setPreferredSize(new Dimension(120, 50));
+        middlePanel.setPreferredSize(new Dimension(200, 50));
         middlePanel.add(famillesScroll, BorderLayout.CENTER);
         middlePanel.add(panierPanel, BorderLayout.EAST);
 
@@ -66,6 +72,11 @@ public class PanelCommandes extends JPanel {
         switcherPanel.add(new JScrollPane(articlesPanel), "Articles");
         switcherPanel.add(new JScrollPane(tablePanel), "Tables");
         switcherPanel.add(new JScrollPane(sallePanel), "Salles");
+        panelCmdEnCours = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        switcherPanel.add(new JScrollPane(panelCmdEnCours), "Encours");
+
+
+
 
 
         add(topPanel, BorderLayout.NORTH);
@@ -87,6 +98,80 @@ public class PanelCommandes extends JPanel {
         chargerSalles();
     }
 
+
+    private void encours() {
+        panelCmdEnCours.removeAll();
+
+        String sql = "SELECT ticket_id, table_id, SUM(prix_total) as total FROM commande WHERE etatcmd = 'validée' GROUP BY ticket_id, table_id";
+
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                int ticketId = rs.getInt("ticket_id");
+                int tableId = rs.getInt("table_id");
+                double total = rs.getDouble("total");
+
+                JButton btnCmd = new JButton(
+                        "Table " + tableId + " | Ticket " + ticketId + " | " + total + " DH"
+                );
+                btnCmd.setPreferredSize(new Dimension(250, 50));
+                btnCmd.setBackground(new Color(52, 152, 219));
+                btnCmd.setForeground(Color.WHITE);
+                btnCmd.setFont(new Font("Arial", Font.BOLD, 14));
+                btnCmd.setFocusPainted(false);
+
+                btnCmd.addActionListener(e -> chargerCommande(ticketId));
+
+                panelCmdEnCours.add(btnCmd);
+            }
+
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this,
+                    "Erreur lors du chargement des commandes : " + e.getMessage(),
+                    "Erreur SQL", JOptionPane.ERROR_MESSAGE);
+        }
+
+        panelCmdEnCours.revalidate();
+        panelCmdEnCours.repaint();
+        CardLayout cl = (CardLayout) switcherPanel.getLayout();
+        cl.show(switcherPanel, "Encours");
+    }
+
+
+
+
+    private void chargerCommande(int ticketId) {
+
+        panier.setRowCount(0);
+
+        String sql = """
+        SELECT a.nom_article, c.prix_unitaire, c.quantite, c.prix_total
+        FROM commande c
+        JOIN article a ON c.article_id = a.id
+        WHERE c.ticket_id = ? AND c.etatcmd = 'validée'
+    """;
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, ticketId);
+            ResultSet rs = ps.executeQuery();
+
+
+            while (rs.next()) {
+                String nom = rs.getString("nom_article");
+                double prix = rs.getDouble("prix_unitaire");
+                int qte = rs.getInt("quantite");
+                double totalLigne = rs.getDouble("prix_total");
+
+                panier.addRow(new Object[]{nom, prix, qte, totalLigne});
+            }
+
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this,
+                    "Erreur lors du chargement du panier : " + e.getMessage(),
+                    "Erreur SQL", JOptionPane.ERROR_MESSAGE);
+        }
+    }
 
     private void chargerFamilles() {
         famillesPanel.removeAll();
@@ -240,6 +325,7 @@ public class PanelCommandes extends JPanel {
                     btnTable.setBackground(Color.GREEN);
                     btnTable.addActionListener(e -> {
                         tableSelectionnee = nom;
+                        idtbs=tableId;
                         salle_table.setText(" " + salleSelectionnee + " | " + tableSelectionnee);
                         try (PreparedStatement pst = conn.prepareStatement(
                                 "UPDATE les_tables SET etat='occupée' WHERE id=?")) {
@@ -277,17 +363,18 @@ public class PanelCommandes extends JPanel {
         JPanel top = new JPanel(new BorderLayout());
         JButton btnespece = new JButton("Espece");
 
-        top.add(salle_table, BorderLayout.WEST);
+        top.add(btnespece, BorderLayout.WEST);
         top.add(btnSupprimer, BorderLayout.EAST);
         top.add(btnValider, BorderLayout.CENTER);
         btnValider.addActionListener(e -> commandevalide());
+        btnespece.addActionListener(e -> cmdpayer());
 
         JScrollPane scroll = new JScrollPane(panierTable);
         scroll.setPreferredSize(new Dimension(250, 250));
 
         JPanel bottom = new JPanel(new BorderLayout());
         bottom.add(total, BorderLayout.EAST);
-        bottom.add(btnespece, BorderLayout.WEST);
+        bottom.add(salle_table, BorderLayout.WEST);
 
         panierPanel.add(top, BorderLayout.NORTH);
         panierPanel.add(scroll, BorderLayout.CENTER);
@@ -329,24 +416,15 @@ public class PanelCommandes extends JPanel {
     }
 
     private void commandevalide() {
-        String sql = "INSERT INTO commande (article_id , prix_unitaire,quantite ,prix_total ,operateur_id ,ticket_id) VALUES (?,?,?,?,?,?)  ";
+        String sql = "INSERT INTO commande (article_id , prix_unitaire,quantite ,prix_total ,operateur_id ,ticket_id,etatcmd,table_id) VALUES (?,?,?,?,?,?,?,?)  ";
         String sqi = "INSERT INTO ticket (date_heure,operateur_id,total_ttc ,table_id ) VALUES (?,?,?,?)";
         double ttc = 0;
-        int tableid=-1;
+        if (idtbs==-1) {
+            JOptionPane.showMessageDialog(this, "La commande doit être liée à une table.");
+            return;
 
-        try{
-            String sq="SELECT id FROM les_tables WHERE nom_table=?";
-            try(PreparedStatement ps= conn.prepareStatement(sq)){
-                ps.setString(1, tableSelectionnee);
-                ResultSet rs = ps.executeQuery();
-                if(rs.next()){
-                    tableid=rs.getInt("id");
-
-                }
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
         }
+
         for (int i = 0; i < panier.getRowCount(); i++) {
             ttc += (Double) panier.getValueAt(i, 3);
         }
@@ -356,7 +434,7 @@ public class PanelCommandes extends JPanel {
             p.setTimestamp(1, now);
             p.setInt(2, operateur_id);
             p.setDouble(3, ttc);
-            p.setInt(4, tableid);
+            p.setInt(4, idtbs);
             p.executeUpdate();
             ResultSet rs = p.getGeneratedKeys();
             int ticketId = -1;
@@ -379,12 +457,8 @@ public class PanelCommandes extends JPanel {
                 ResultSet rs1 = ps1.executeQuery();
                 if (rs1.next()) {
                     int id = rs1.getInt("id");
-                    if (tableSelectionnee == null || tableSelectionnee.isEmpty()
-                            || salleSelectionnee == null || salleSelectionnee.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, "La commande doit être liée à une table.");
-                        return;
-                    }
-                    else{
+
+
                         try (PreparedStatement ps2 = conn.prepareStatement(sql)) {
                             ps2.setInt(1, id);
                             ps2.setDouble(2, prix);
@@ -395,9 +469,11 @@ public class PanelCommandes extends JPanel {
 
                             ps2.setInt(5, operateur_id);
                             ps2.setInt(6, ticketId);
+                            ps2.setString(7,"validée");
+                            ps2.setInt(8, idtbs);
                             ps2.executeUpdate();
                         }
-                    }
+
 
                 }
 
@@ -420,8 +496,27 @@ public class PanelCommandes extends JPanel {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        liberertable(tableid);
 
+        //liberertable(tableid);
+
+    }
+    private void cmdpayer(){
+        String sql="UPDATE commande set etatcmd='payée' where table_id=?";
+
+
+
+       if (idtbs==-1){
+           JOptionPane.showMessageDialog(this, "Aucune table séléctionnée");
+           return;
+       }
+        try(PreparedStatement p=conn.prepareStatement(sql)){
+            p.setInt(1,idtbs);
+            p.executeUpdate();
+
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        liberertable(idtbs);
     }
 
     private String construireTicket(String client, String[] lignes, double total) {

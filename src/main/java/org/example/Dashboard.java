@@ -3,6 +3,9 @@ package org.example;
 import javax.swing.*;
 import java.awt.*;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 public class Dashboard extends JFrame {
 
@@ -38,24 +41,53 @@ public class Dashboard extends JFrame {
 
 
 
-
+        JButton operateur=new JButton("Operateur : %s".formatted(nomop(operateurId)));
 
         btnCommandes.addActionListener(e -> switchPanel("commandes"));
         btnParametres.addActionListener(e -> switchPanel("parametres"));
         btncloture.addActionListener(e -> {
-            int confirm = JOptionPane.showConfirmDialog(this, "Voulez-vous vous déconnecter ?", "Confirmation", JOptionPane.YES_NO_OPTION);
-            if (confirm == JOptionPane.YES_OPTION) {
+            try {
 
-                Window window = SwingUtilities.getWindowAncestor(this);
-                if (window != null) {
-                    window.dispose();
+                String sql = "SELECT COUNT(*) FROM commande WHERE operateur_id=? AND etatcmd='validée'";
+                boolean commandesNonPayees = false;
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setInt(1, operateurId);
+                    ResultSet rs = ps.executeQuery();
+                    if (rs.next() && rs.getInt(1) > 0) {
+                        commandesNonPayees = true;
+                    }
                 }
-                SwingUtilities.invokeLater(() -> {
-                    Main.main(null);
-                });
+
+                if (commandesNonPayees) {
+                    JOptionPane.showMessageDialog(this,
+                            "Il reste des commandes non payées. Veuillez les clôturer avant de vous déconnecter.",
+                            "Attention",
+                            JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                int confirm = JOptionPane.showConfirmDialog(this,
+                        "Voulez-vous vous déconnecter ?",
+                        "Confirmation",
+                        JOptionPane.YES_NO_OPTION);
+                if (confirm != JOptionPane.YES_OPTION) return;
+                Window window = SwingUtilities.getWindowAncestor((Component) e.getSource());
+                if (window != null) window.dispose();
+
+                if (conn != null && !conn.isClosed()) conn.close();
+                SwingUtilities.invokeLater(() -> Main.main(null));
+
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this,
+                        "Erreur lors de la vérification des commandes : " + ex.getMessage(),
+                        "Erreur SQL",
+                        JOptionPane.ERROR_MESSAGE);
             }
         });
 
+
+        bottomMenu.add(operateur);
         bottomMenu.add(btnCommandes);
         bottomMenu.add(btnParametres);
         bottomMenu.add(btncloture);
@@ -77,6 +109,20 @@ public class Dashboard extends JFrame {
 
 restriction();
 
+    }
+    private String nomop(int operateur_id){
+        String sql="SELECT nom_operateur from operateur where id=?";
+        try(PreparedStatement ps=conn.prepareStatement(sql)){
+            ps.setInt(1,operateur_id);
+            ps.executeQuery();
+            ResultSet r=ps.executeQuery();
+            if(r.next()){
+                return r.getString("nom_operateur");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return "Inconnu";
     }
     public void switchPanel(String name){
         CardLayout cl = (CardLayout) contentPanel.getLayout();
