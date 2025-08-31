@@ -5,6 +5,7 @@ import com.toedter.calendar.JDateChooser;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.io.PrintWriter;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 
@@ -32,6 +33,9 @@ public class PanelStats extends JPanel {
 
         JPanel panelGlobal = new JPanel(new BorderLayout(5, 5));
 
+        JButton btnExporter = new JButton("Exporter CSV");
+
+        btnExporter.addActionListener(e -> exporterStatsCSV());
 
         modelStats = new DefaultTableModel(new String[]{"Date", "Total Journée", "Nombre Tickets", "Nombre Clients"}, 0);
         tableStats = new JTable(modelStats);
@@ -53,6 +57,7 @@ public class PanelStats extends JPanel {
         panelFiltreStats.add(new JLabel("Serveur:"));
         panelFiltreStats.add(comboServeur);
         panelFiltreStats.add(btnFiltrerStats);
+        panelFiltreStats.add(btnExporter);
 
         panelGlobal.add(panelFiltreStats, BorderLayout.NORTH);
         panelGlobal.add(new JScrollPane(tableStats), BorderLayout.CENTER);
@@ -205,4 +210,45 @@ public class PanelStats extends JPanel {
             e.printStackTrace();
         }
     }
+    private void exporterStatsCSV() {
+        if (modelStats.getRowCount() == 0) {
+            JOptionPane.showMessageDialog(this, "Aucune statistique à exporter.");
+            return;
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Enregistrer le fichier CSV");
+        int userSelection = fileChooser.showSaveDialog(this);
+
+        if (userSelection == JFileChooser.APPROVE_OPTION) {
+            String filePath = fileChooser.getSelectedFile().getAbsolutePath();
+            if (!filePath.endsWith(".csv")) {
+                filePath += ".csv";
+            }
+
+            try (PrintWriter pw = new PrintWriter(filePath)) {
+
+                for (int i = 0; i < modelStats.getColumnCount(); i++) {
+                    pw.print(modelStats.getColumnName(i));
+                    if (i < modelStats.getColumnCount() - 1) pw.print(",");
+                }
+                pw.println();
+
+
+                for (int row = 0; row < modelStats.getRowCount(); row++) {
+                    for (int col = 0; col < modelStats.getColumnCount(); col++) {
+                        Object value = modelStats.getValueAt(row, col);
+                        pw.print(value != null ? value.toString() : "");
+                        if (col < modelStats.getColumnCount() - 1) pw.print(",");
+                    }
+                    pw.println();
+                }
+
+                JOptionPane.showMessageDialog(this, "Exportation terminée avec succès !");
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(this, "Erreur lors de l'exportation : " + e.getMessage());
+            }
+        }
+    }
+
 }

@@ -2,15 +2,9 @@ package org.example;
 
 import javax.swing.*;
 import java.awt.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-
+import java.sql.*;
 
 public class Main extends JFrame {
-
-
-
 
     public static void main(String[] args) {
         Connection conn = DatabaseConnection.connect();
@@ -18,6 +12,7 @@ public class Main extends JFrame {
             JOptionPane.showMessageDialog(null, "Erreur de connexion à la base de données.");
             return;
         }
+
         ImageIcon image = new ImageIcon(Main.class.getResource("/coda.jpg"));
 
         JFrame frame = new JFrame("Connexion");
@@ -25,7 +20,6 @@ public class Main extends JFrame {
         frame.setSize(350, 250);
         frame.setLocationRelativeTo(null);
         frame.setIconImage(image.getImage());
-
 
         JPanel panel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
@@ -40,7 +34,7 @@ public class Main extends JFrame {
         JLabel passLabel = new JLabel("Mot de passe:");
         JPasswordField passField = new JPasswordField(15);
 
-        JButton loginBtn = new JButton("Se connecter" );
+        JButton loginBtn = new JButton("Se connecter");
 
         gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
         panel.add(titre, gbc);
@@ -63,8 +57,7 @@ public class Main extends JFrame {
         frame.add(panel);
         frame.setVisible(true);
 
-        loginBtn.addActionListener(
-                e -> {
+        loginBtn.addActionListener(e -> {
             String username = nomField.getText().trim();
             String password = new String(passField.getPassword()).trim();
 
@@ -74,18 +67,20 @@ public class Main extends JFrame {
             }
 
             try {
-                String sql1="SELECT g.nom_groupe ,o.id FROM operateur o JOIN groupe g ON o.groupe_op=g.id WHERE o.nom_operateur=? AND o.password=?";
-               
-                PreparedStatement ps = conn.prepareStatement(sql1);
+                String sql = "SELECT g.nom_groupe, o.id FROM operateur o " +
+                        "JOIN groupe g ON o.groupe_op=g.id " +
+                        "WHERE o.nom_operateur=? AND o.password=?";
+                PreparedStatement ps = conn.prepareStatement(sql);
                 ps.setString(1, username);
-                ps.setString(2, password);
+                ps.setString(2, password); // ou hash si tu veux garder le hash
                 ResultSet rs = ps.executeQuery();
 
                 if (rs.next()) {
                     int operateurId = rs.getInt("id");
                     String nomGroupe = rs.getString("nom_groupe");
+
                     frame.dispose();
-                    new Dashboard(conn,operateurId,nomGroupe);
+                    new Dashboard(conn, operateurId, nomGroupe);
                 } else {
                     JOptionPane.showMessageDialog(frame, "Nom d'utilisateur ou mot de passe incorrect !");
                 }

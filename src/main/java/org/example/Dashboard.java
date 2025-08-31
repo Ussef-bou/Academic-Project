@@ -94,11 +94,11 @@ public class Dashboard extends JFrame {
 
         add(bottomMenu, BorderLayout.SOUTH);
 
-        contentPanel.add(new PanelCommandes(conn, operateurId),"commandes");
+        contentPanel.add(new PanelCommandes(conn, operateurId,nomGroupe),"commandes");
         contentPanel.add(new PanelArticles(conn), "articles");
         contentPanel.add(new PanelClients(conn), "clients");
         contentPanel.add(new PanelTickets(conn), "tickets");
-        contentPanel.add(new PanelCaisse(conn), "caisse");
+        contentPanel.add(new PanelCaisse(conn,operateurId), "caisse");
         contentPanel.add(new PanelStats(conn), "statistiques");
         contentPanel.add(new PanelParametres(conn, this), "parametres");
         contentPanel.add(new Paneloperateur(conn), "operateur");
@@ -114,7 +114,7 @@ restriction();
         String sql="SELECT nom_operateur from operateur where id=?";
         try(PreparedStatement ps=conn.prepareStatement(sql)){
             ps.setInt(1,operateur_id);
-            ps.executeQuery();
+
             ResultSet r=ps.executeQuery();
             if(r.next()){
                 return r.getString("nom_operateur");
@@ -135,9 +135,13 @@ restriction();
                 break;
             case "serveur":
                 btnParametres.setEnabled(false);
+                btnParametres.setVisible(false);
                 break;
             case"caissier":
                 btnParametres.setEnabled(false);
+                btnParametres.setVisible(false);
+
+
                 break;
 
         }

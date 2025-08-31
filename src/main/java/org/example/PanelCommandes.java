@@ -13,7 +13,10 @@ import java.time.format.DateTimeFormatter;
 public class PanelCommandes extends JPanel {
     private final Connection conn;
     private JPanel famillesPanel, articlesPanel, panierPanel, sallePanel, tablePanel, panelCmdEnCours;
-    ;
+    JButton btnespece = new JButton("Espece");
+    JButton btnSupprimer = new JButton("Supprimer");
+    JButton btnReset = new JButton("Reset");
+    JButton btnencours=new JButton("Cmd encours");
     private JTable panierTable;
     private JLabel total;
     private JLabel salle_table;
@@ -23,10 +26,13 @@ public class PanelCommandes extends JPanel {
     private String tableSelectionnee = "";
     private JPanel switcherPanel;
     private int idtbs=-1;
+    private String nomGroupe;
+    private Integer TicketId = null;
 
-    public PanelCommandes(Connection conn, int operateur_id) {
+    public PanelCommandes(Connection conn, int operateur_id,String nomGroupe) {
         this.conn = conn;
         this.operateur_id = operateur_id;
+        this.nomGroupe=nomGroupe;
 
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
@@ -34,8 +40,7 @@ public class PanelCommandes extends JPanel {
 
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         topPanel.setPreferredSize(new Dimension(100, 50));
-        JButton btnReset = new JButton("Reset");
-        JButton btnencours=new JButton("Cmd encours");
+
         JButton btnSalle = new JButton("Salle");
 
 
@@ -96,6 +101,7 @@ public class PanelCommandes extends JPanel {
 
         chargerFamilles();
         chargerSalles();
+        restriction();
     }
 
 
@@ -112,6 +118,7 @@ public class PanelCommandes extends JPanel {
                 int tableId = rs.getInt("table_id");
                 double total = rs.getDouble("total");
 
+
                 JButton btnCmd = new JButton(
                         "Table " + tableId + " | Ticket " + ticketId + " | " + total + " DH"
                 );
@@ -120,8 +127,13 @@ public class PanelCommandes extends JPanel {
                 btnCmd.setForeground(Color.WHITE);
                 btnCmd.setFont(new Font("Arial", Font.BOLD, 14));
                 btnCmd.setFocusPainted(false);
+                
 
-                btnCmd.addActionListener(e -> chargerCommande(ticketId));
+                btnCmd.addActionListener(e ->{
+
+
+                        TicketId=ticketId;
+                        chargerCommande(ticketId);});
 
                 panelCmdEnCours.add(btnCmd);
             }
@@ -140,10 +152,20 @@ public class PanelCommandes extends JPanel {
 
 
 
-
     private void chargerCommande(int ticketId) {
-
         panier.setRowCount(0);
+
+        // Récupérer la table liée à ce ticket
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT DISTINCT table_id FROM commande WHERE ticket_id = ?")) {
+            ps.setInt(1, ticketId);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                idtbs = rs.getInt("table_id");
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Erreur récupération table : " + e.getMessage());
+        }
 
         String sql = """
         SELECT a.nom_article, c.prix_unitaire, c.quantite, c.prix_total
@@ -156,15 +178,16 @@ public class PanelCommandes extends JPanel {
             ps.setInt(1, ticketId);
             ResultSet rs = ps.executeQuery();
 
-
             while (rs.next()) {
                 String nom = rs.getString("nom_article");
                 double prix = rs.getDouble("prix_unitaire");
                 int qte = rs.getInt("quantite");
                 double totalLigne = rs.getDouble("prix_total");
-
                 panier.addRow(new Object[]{nom, prix, qte, totalLigne});
             }
+            calculerTotal();
+
+            salle_table.setText("Ticket: " + ticketId + " | Table: " + idtbs);
 
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(this,
@@ -172,6 +195,7 @@ public class PanelCommandes extends JPanel {
                     "Erreur SQL", JOptionPane.ERROR_MESSAGE);
         }
     }
+
 
     private void chargerFamilles() {
         famillesPanel.removeAll();
@@ -357,11 +381,11 @@ public class PanelCommandes extends JPanel {
         salle_table = new JLabel("Salle : | Table : ");
         total = new JLabel("Total: 0.00 DH");
 
-        JButton btnSupprimer = new JButton("Supprimer");
+
         btnSupprimer.addActionListener(e -> supprimerArticle());
         JButton btnValider = new JButton("Valider");
         JPanel top = new JPanel(new BorderLayout());
-        JButton btnespece = new JButton("Espece");
+
 
         top.add(btnespece, BorderLayout.WEST);
         top.add(btnSupprimer, BorderLayout.EAST);
@@ -480,44 +504,64 @@ public class PanelCommandes extends JPanel {
 
             }
 
-            String[] lignes = new String[panier.getRowCount()];
-            for (int i = 0; i < panier.getRowCount(); i++) {
-                String nom = (String) panier.getValueAt(i, 0);
-                int qte = (Integer) panier.getValueAt(i, 2);
-                double prix = (Double) panier.getValueAt(i, 1);
-                double totalLigne = (Double) panier.getValueAt(i, 3);
-                lignes[i] = nom + " x" + qte + " @ " + prix + " = " + totalLigne + " DH";
-            }
 
-            String ticket = construireTicket("Client", lignes, ttc);
-            // imprimerTicket(ticket);
+
 
 
         } catch (SQLException e) {
             e.printStackTrace();
         }
 
-        //liberertable(tableid);
-
+reset();
+        CardLayout cl = (CardLayout) switcherPanel.getLayout();
+        cl.show(switcherPanel, "Articles");
     }
-    private void cmdpayer(){
-        String sql="UPDATE commande set etatcmd='payée' where table_id=?";
+    private void cmdpayer() {
 
 
 
-       if (idtbs==-1){
-           JOptionPane.showMessageDialog(this, "Aucune table séléctionnée");
-           return;
-       }
-        try(PreparedStatement p=conn.prepareStatement(sql)){
-            p.setInt(1,idtbs);
+
+        String sql = "UPDATE commande SET etatcmd='payée' WHERE ticket_id=?";
+        try (PreparedStatement p = conn.prepareStatement(sql)) {
+            p.setInt(1, TicketId);
             p.executeUpdate();
-
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            JOptionPane.showMessageDialog(this, "Erreur lors du paiement : " + e.getMessage());
+            return;
         }
-        liberertable(idtbs);
+
+        String[] lignes = new String[panier.getRowCount()];
+        double ttc = 0;
+        for (int i = 0; i < panier.getRowCount(); i++) {
+            String nom = (String) panier.getValueAt(i, 0);
+            int qte = (Integer) panier.getValueAt(i, 2);
+            double prix = (Double) panier.getValueAt(i, 1);
+            double totalLigne = (Double) panier.getValueAt(i, 3);
+            lignes[i] = nom + " x" + qte + " @ " + prix + " = " + totalLigne + " DH";
+            ttc += totalLigne;
+        }
+
+        String ticket = construireTicket("Client", lignes, ttc);
+
+        try {
+            imprimerTicket(ticket);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erreur lors de l'impression du ticket : " + ex.getMessage());
+        }
+
+
+        if (idtbs != -1) {
+            liberertable(idtbs);
+        }
+
+        reset();
+        idtbs = -1;
+        TicketId = null;
+        salle_table.setText("Salle : | Table : ");
+        CardLayout cl = (CardLayout) switcherPanel.getLayout();
+        cl.show(switcherPanel, "Articles");
     }
+
 
     private String construireTicket(String client, String[] lignes, double total) {
         StringBuilder sb = new StringBuilder();
@@ -534,6 +578,27 @@ public class PanelCommandes extends JPanel {
         sb.append("**********************************\n");
         return sb.toString();
     }
+    private void restriction(){
+        switch(nomGroupe){
+            case "Admin":
+                break;
+            case "serveur":
+               btnespece.setEnabled(false);
+               btnespece.setVisible(false);
+               btnSupprimer.setEnabled(false);
+               btnSupprimer.setVisible(false);
+               btnReset.setEnabled(false);
+               btnReset.setVisible(false);
+
+                break;
+            case"caissier":
+                break;
+
+
+
+        }
+    }
+
 
 
 
@@ -562,5 +627,6 @@ public class PanelCommandes extends JPanel {
         }
 
     }
+
 }
 
